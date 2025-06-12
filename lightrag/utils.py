@@ -12,6 +12,8 @@ import xml.etree.ElementTree as ET
 
 import numpy as np
 import tiktoken
+from transformers import AutoTokenizer
+
 
 ENCODER = None
 
@@ -114,20 +116,19 @@ def write_json(json_obj, file_name):
     with open(file_name, "w", encoding="utf-8") as f:
         json.dump(json_obj, f, indent=2, ensure_ascii=False)
 
-
-def encode_string_by_tiktoken(content: str, model_name: str = "gpt-4o"):
+# "/home/zemelee/models/bge-base-en-v1.5"
+def encode_string_by_tiktoken(content, model_name=""):
     global ENCODER
     if ENCODER is None:
-        ENCODER = tiktoken.encoding_for_model(model_name)
-    tokens = ENCODER.encode(content)
+        ENCODER = AutoTokenizer.from_pretrained("/home/zemelee/models/bge-base-en-v1.5")
+    tokens = ENCODER.encode(content, return_tensors="pt")
     return tokens
 
-
-def decode_tokens_by_tiktoken(tokens: list[int], model_name: str = "gpt-4o"):
+def decode_tokens_by_tiktoken(tokens: list[int], model_name=""):
     global ENCODER
     if ENCODER is None:
-        ENCODER = tiktoken.encoding_for_model(model_name)
-    content = ENCODER.decode(tokens)
+        ENCODER = AutoTokenizer.from_pretrained("/home/zemelee/models/bge-base-en-v1.5")
+    content = ENCODER.decode(tokens[0], skip_special_tokens=True)
     return content
 
 

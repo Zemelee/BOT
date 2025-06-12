@@ -7,7 +7,7 @@ from typing import Type, cast
 
 from .llm import (
     gpt_4o_mini_complete,
-    openai_embedding,
+    custom_embedding,
 )
 from .operate import (
     chunking_by_token_size,
@@ -79,7 +79,7 @@ class LightRAG:
     )
 
     # embedding_func: EmbeddingFunc = field(default_factory=lambda:hf_embedding)
-    embedding_func: EmbeddingFunc = field(default_factory=lambda: openai_embedding)
+    embedding_func: EmbeddingFunc = field(default_factory=lambda: custom_embedding)
     embedding_batch_num: int = 32
     embedding_func_max_async: int = 16
 
@@ -165,12 +165,14 @@ class LightRAG:
         try:
             if isinstance(string_or_strings, str):
                 string_or_strings = [string_or_strings]
-
+            # 对每个文档生成一个hash_id
             new_docs = {
                 compute_mdhash_id(c.strip(), prefix="doc-"): {"content": c.strip()}
                 for c in string_or_strings
-            }
-            _add_doc_keys = await self.full_docs.filter_keys(list(new_docs.keys()))
+            } 
+            # 过滤已存在的hash_id
+            _add_doc_keys = await self.full_docs.filter_keys(list(new_docs.keys())) 
+             # {"hash1":{content:""},}
             new_docs = {k: v for k, v in new_docs.items() if k in _add_doc_keys}
             if not len(new_docs):
                 logger.warning("All docs are already in the storage")
@@ -179,7 +181,8 @@ class LightRAG:
 
             inserting_chunks = {}
             for doc_key, doc in new_docs.items():
-                chunks = {
+                # 将一段长文本按照 token 数量切分为多个带重叠的小块（chunks），并为每个 chunk 生成唯一的 ID 和元数据
+                chunks = { 
                     compute_mdhash_id(dp["content"], prefix="chunk-"): {
                         **dp,
                         "full_doc_id": doc_key,
@@ -270,14 +273,6 @@ class LightRAG:
                 self.chunk_entity_relation_graph,
                 self.entities_vdb,
                 self.relationships_vdb,
-                self.text_chunks,
-                param,
-                asdict(self),
-            )
-        elif param.mode == "naive":
-            response = await naive_query(
-                query,
-                self.chunks_vdb,
                 self.text_chunks,
                 param,
                 asdict(self),

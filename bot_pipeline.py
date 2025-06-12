@@ -10,66 +10,28 @@ from openai import OpenAI
 
 class Pipeline:
     def __init__(self,model_id,api_key=None,base_url='https://api.openai.com/v1/'):
-        self.api = False
         self.local = False
         self.base_url = base_url
         self.model_id = model_id
-        if api_key is None:
-            self.local = True
-            self.pipeline = transformers.pipeline(
-        "text-generation",
-        model=self.model_id,
-        model_kwargs={"torch_dtype": torch.bfloat16},
-        device_map = 'auto'
+        self.api = True
+        self.api_key = api_key
+    def get_respond(self, meta_prompt, user_prompt):
+        client = OpenAI(api_key=self.api_key,base_url= self.base_url)
+        completion = client.chat.completions.create(
+            model=self.model_id,
+            messages=[
+                {"role": "system", "content": meta_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
         )
-        else:
-            self.api = True
-            self.api_key = api_key
-    def get_respond(self,meta_prompt,user_prompt):
-        if self.api:
-            client = OpenAI(api_key=self.api_key,base_url= self.base_url)
-            completion = client.chat.completions.create(
-                model=self.model_id,
-                messages=[
-                    {"role": "system", "content": meta_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-            )
-            response = completion.choices[0].message.content
-            return response
-        else:
-            messages = [
-            {"role": "system", "content": meta_prompt},
-            {"role": "user", "content": user_prompt},
-        ]
-
-            prompt = self.pipeline.tokenizer.apply_chat_template(
-                    messages, 
-                    tokenize=False, 
-                    add_generation_prompt=True
-            )
-
-            terminators = [
-                self.pipeline.tokenizer.eos_token_id,
-                self.pipeline.tokenizer.convert_tokens_to_ids("<|eot_id|>")
-            ]
-
-            outputs = self.pipeline(
-                prompt,
-                max_new_tokens=2048,
-                eos_token_id=terminators,
-                do_sample=True,
-                temperature=0.4,
-                top_p=0.9,
-            )
-            respond = outputs[0]["generated_text"][len(prompt):]
-            return respond
-            
+        response = completion.choices[0].message.content
+        # 问题概括专家+思维模板示例(Problem20)+(问题+计算过程+答案)=新思维模板
+        return response
 
 
         
 class BoT:
-    def __init__(self, user_input,problem_id=0,api_key=None,model_id='gpt-4o-mini',embedding_model='text-embedding-3-large',need_check=False,base_url='https://api.openai.com/v1/',rag_dir=None):
+    def __init__(self, user_input,problem_id=0,api_key=None,model_id='',embedding_model='',need_check=False,base_url='https://api.moonshot.cn/v1'):
         self.api_key = api_key
         self.model_id = model_id
         self.embedding_model = embedding_model
@@ -77,17 +39,19 @@ class BoT:
         self.pipeline = Pipeline(self.model_id,self.api_key,self.base_url)
         self.meta_buffer = MetaBuffer(self.model_id,self.embedding_model,self.api_key,base_url=self.base_url)
         self.user_input = user_input
-        # Only for test use, stay tuned for our update
         self.problem_id = problem_id 
         self.need_check = need_check
         with open("./math.txt") as f:
-            self.meta_buffer.rag.insert(f.read())
+            content = f.read()
+            print("len(math.txt): ", len(content))
+            self.meta_buffer.rag.insert(content)
             
     def update_input(self,new_input):
         self.user_input = new_input
         
+    # 蒸馏提取任务关键信息
     def problem_distillation(self):
-        print(f'User prompt:{self.user_input}')
+        print(f'User prompt:{self.user_input}') # 年龄问题
         self.distilled_information = self.pipeline.get_respond(meta_distiller_prompt, self.user_input)
         print(f'Distilled information:{self.distilled_information}')
 
@@ -101,18 +65,22 @@ class BoT:
             self.thought_template = word_sorting
             
     def buffer_instantiation(self):
+        # 根据任务描述，从元缓冲区中提取最相关的思想模板，并基于模板生成解决方案
         self.buffer_prompt = """
         You are an expert in problem analysis and can apply previous problem-solving approaches to new issues. The user will provide a specific task description and a meta buffer that holds multiple thought templates that will help to solve the problem. Your goal is to first extract most relevant thought template from meta buffer, analyze the user's task and generate a specific solution based on the thought template. Give a final answer that is easy to extract from the text.
         """
         input = self.buffer_prompt + self.distilled_information
+        # 直接返回解决方案?
         self.result = self.meta_buffer.retrieve_and_instantiate(input)
-        print(self.result)
+        print("self.result:", self.result)
         
     def buffer_manager(self):
+        # 用户输入+新方案
         self.problem_solution_pair = self.user_input + self.result
-        self.thought_distillation()
+        self.thought_distillation() # 返回问题的思维模板
         self.meta_buffer.dynamic_update(self.distilled_thought)
         
+    # 要求提取思维模板 + 模板示例
     def thought_distillation(self):
         thought_distillation_prompt = """You are an expert in problem analysis and generalization. Your task is to follow the format of thought template below and distill a high-level thought template to solve similar problems:
         Example thought template:
@@ -136,6 +104,7 @@ It should be noted that you should only return the thought template without any 
         """
         self.distilled_thought = self.pipeline.get_respond(thought_distillation_prompt, self.problem_solution_pair)
         print('Distilled thought: ',self.distilled_thought)
+    
     def reasoner_instantiation(self):
         # Temporay using selection method to select answer extract method
         problem_id_list = [0,1,2]
@@ -180,7 +149,7 @@ Your respond should follow the format below:
                     print('The code cannot be executed correctly, here we continue the edit phase:',self.inter_result)
                     print('The problem code is:',code_str)
                     self.inter_input = self.pipeline.get_respond(self.inspector_prompt,self.inter_input)
-                    print(self.inter_input)
+                    print("self.inter_input:", self.inter_input)
                     self.inter_result, inter_code_str = extract_and_execute_code(self.inter_input)
                     self.inter_input = f"""
                 User_input:{self.user_input}
@@ -203,9 +172,9 @@ Your respond should follow the format below:
         return self.final_result
     
     def bot_inference(self):
-        self.problem_distillation()
-        self.buffer_instantiation()
-        self.buffer_manager()
+        self.problem_distillation() # 提取用户输入的关键信        
+        self.buffer_instantiation() # 根据问题 ID 选择相应的思维模板，生成解决方案
+        self.buffer_manager() # 根据检索到的思维模板生成具体的解决方案
         print('Final results:',self.result)
     
     

@@ -27,9 +27,9 @@ Input:
 
 if __name__ == "__main__":
     args = parser.parse_args()
-    task = args.task_name
-    api_key = args.api_key
-    model_id = args.model_id
+    task = "gameof24"
+    api_key = "sk-"
+    model_id = "moonshot-v1-32k"
     now = datetime.datetime.now()
     timestamp_str = now.strftime("%Y-%m-%d-%H:%M:%S")
     output_dir = 'test_results'

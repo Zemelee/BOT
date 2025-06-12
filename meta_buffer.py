@@ -1,11 +1,12 @@
 import os
 from lightrag import LightRAG, QueryParam
-from lightrag.llm import gpt_4o_mini_complete, gpt_4o_complete,openai_complete_if_cache,openai_embedding,hf_model_complete
+from lightrag.llm import gpt_4o_mini_complete,openai_complete_if_cache,hf_model_complete,custom_embedding
 import numpy as np
 from lightrag.utils import EmbeddingFunc, compute_args_hash
-
+from transformers import AutoModel, AutoTokenizer
+import torch
 class MetaBuffer:
-    def __init__(self,llm_model,embedding_model,api_key=None,base_url="https://api.openai.com/v1/",rag_dir='./test'):
+    def __init__(self,llm_model,embedding_model,api_key=None,base_url="",rag_dir='./test'):
         self.api_key = api_key
         self.llm = llm_model
         self.embedding_model = embedding_model
@@ -13,12 +14,11 @@ class MetaBuffer:
         if not os.path.exists(rag_dir):
             os.mkdir(rag_dir)
         self.rag = LightRAG(
-        working_dir= rag_dir,
+        working_dir= './test',
         llm_model_func=self.llm_model_func,  # Use Hugging Face model for text generation
-        # llm_model_name='../../models/Qwen2.5-Math-7B-Instruct',  # Model name from Hugging Face
         embedding_func=EmbeddingFunc(
-            embedding_dim=3072,
-            max_token_size=8192,
+            embedding_dim=768,
+            max_token_size=512,
             func=self.embedding_func
         )
     )
@@ -37,26 +37,28 @@ class MetaBuffer:
             **kwargs
         )
     async def embedding_func(self, texts: list[str]) -> np.ndarray:
-        
-        return await openai_embedding(
+        res =  await custom_embedding(
             texts,
-            model= self.embedding_model,
-            api_key= self.api_key,
-            base_url= self.base_url
+            model_name= "/home/zemelee/models/bge-base-en-v1.5",
         )
+        print("Embedding shape:", res.shape)
+        return res
+
     
     def retrieve_and_instantiate(self,input):
         response = self.rag.query(input, param=QueryParam(mode="hybrid"))
         return response
     
     def dynamic_update(self,thought_template):
+        # 判断与MetaBuffer中最相关的模板是否有差别
         prompt = """
-Find most relevant thought template in the MetaBuffer according to the given thought template, and Determine whether there is a fundamental difference in the problem-solving approach between this and the most similar thought template in MetaBuffer. If there is, output "True." If there is no fundamental difference, or if the two thought templates are highly similar, output "False."
-"""
+            Find most relevant thought template in the MetaBuffer according to the given thought template, and Determine whether there is a fundamental difference in the problem-solving approach between this and the most similar thought template in MetaBuffer. If there is, output "True." If there is no fundamental difference, or if the two thought templates are highly similar, output "False."
+        """
+        # 原是问题的思想模板
         input = prompt + thought_template
         # Perform naive search
         response = self.rag.query(input, param=QueryParam(mode="hybrid"))
-        print(response)
+        print(response) # 查找思维模板中最相似的思维模板，并根据差异性判断是否更新MetaBuffer
         if self.extract_similarity_decision(response):
             print('MetaBuffer Updated!')
             self.rag.insert(thought_template)

@@ -25,15 +25,15 @@ from .base import (
 )
 from .prompt import GRAPH_FIELD_SEP, PROMPTS
 
-
+# 将文档按 token 分成若干个小块
 def chunking_by_token_size(
     content: str, overlap_token_size=128, max_token_size=1024, tiktoken_model="gpt-4o"
-):
-    tokens = encode_string_by_tiktoken(content, model_name=tiktoken_model)
+): # overlap相邻两个 chunk 之间的重叠 token 数量
+    tokens = encode_string_by_tiktoken(content, model_name=tiktoken_model)  # 对文本编码，得到 token ids
     results = []
     for index, start in enumerate(
         range(0, len(tokens), max_token_size - overlap_token_size)
-    ):
+    ): # 把当前窗口内的 token ids 解码回字符串
         chunk_content = decode_tokens_by_tiktoken(
             tokens[start : start + max_token_size], model_name=tiktoken_model
         )
@@ -44,7 +44,8 @@ def chunking_by_token_size(
                 "chunk_order_index": index,
             }
         )
-    return results
+        # 把每个 chunk 的内容、token 数量、顺序号保存到结果中
+    return results 
 
 
 async def _handle_entity_relation_summary(
@@ -890,12 +891,12 @@ async def hybrid_query(
     kw_prompt_temp = PROMPTS["keywords_extraction"]
     kw_prompt = kw_prompt_temp.format(query=query)
 
-    result = await use_model_func(kw_prompt)
+    result = await use_model_func(kw_prompt) # 高低level关键词
     try:
         keywords_data = json.loads(result)
         hl_keywords = keywords_data.get("high_level_keywords", [])
         ll_keywords = keywords_data.get("low_level_keywords", [])
-        hl_keywords = ", ".join(hl_keywords)
+        hl_keywords = ", ".join(hl_keywords) # high_level_keywords
         ll_keywords = ", ".join(ll_keywords)
     except json.JSONDecodeError:
         try:
@@ -961,7 +962,7 @@ async def hybrid_query(
             .replace("</system>", "")
             .strip()
         )
-    return response
+    return response # 根据任务描述和提炼信息，从元缓冲区中应用“年龄问题”的思考模板+计算过程+答案
 
 
 def combine_contexts(high_level_context, low_level_context):
