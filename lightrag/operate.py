@@ -471,12 +471,12 @@ async def _build_local_query_context(
         return None
     node_datas = await asyncio.gather(
         *[knowledge_graph_inst.get_node(r["entity_name"]) for r in results]
-    )
+    ) # {'entity_type': '"ORGANIZATION"', 'description': 'xxx', 'source_id': 'chunk-xxx'}
     if not all([n is not None for n in node_datas]):
         logger.warning("Some nodes are missing, maybe the storage is damaged")
     node_degrees = await asyncio.gather(
         *[knowledge_graph_inst.node_degree(r["entity_name"]) for r in results]
-    )
+    ) # [2,0,0,...1,1,0,0,1,1,1]
     node_datas = [
         {**n, "entity_name": k["entity_name"], "rank": d}
         for k, n, d in zip(results, node_datas, node_degrees)
@@ -484,13 +484,13 @@ async def _build_local_query_context(
     ]
     use_text_units = await _find_most_related_text_unit_from_entities(
         node_datas, query_param, text_chunks_db, knowledge_graph_inst
-    )
+    ) # {tokens,content,chunk_order,full_doc_id}
     use_relations = await _find_most_related_edges_from_entities(
         node_datas, query_param, knowledge_graph_inst
     )
     logger.info(
         f"Local query uses {len(node_datas)} entites, {len(use_relations)} relations, {len(use_text_units)} text units"
-    )
+    ) # INFO：lightrag：本地查询使用26个实体，4个关系，1个文本单元
     entites_section_list = [["id", "entity", "type", "description", "rank"]]
     for i, n in enumerate(node_datas):
         entites_section_list.append(
@@ -907,7 +907,6 @@ async def hybrid_query(
                 .strip()
             )
             result = "{" + result.split("{")[1].split("}")[0] + "}"
-
             keywords_data = json.loads(result)
             hl_keywords = keywords_data.get("high_level_keywords", [])
             ll_keywords = keywords_data.get("low_level_keywords", [])
@@ -917,8 +916,7 @@ async def hybrid_query(
         except json.JSONDecodeError as e:
             print(f"JSON parsing error: {e}")
             return PROMPTS["fail_response"]
-
-    if ll_keywords:
+    if ll_keywords: # 低层次词汇的逗号连接
         low_level_context = await _build_local_query_context(
             ll_keywords,
             knowledge_graph_inst,
@@ -926,7 +924,9 @@ async def hybrid_query(
             text_chunks_db,
             query_param,
         )
-
+        # id,实体,类型,描述,等级
+        # 0,"METABUFFER",组织,"Metabuffer是文本的来源，提供数学问题解决策略和公式。",
+        # 28,"钟表问题",事件,"钟表问题涉及研究钟表上时针和分针之间的关系。",0
     if hl_keywords:
         high_level_context = await _build_global_query_context(
             hl_keywords,

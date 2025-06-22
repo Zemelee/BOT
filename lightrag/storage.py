@@ -98,18 +98,18 @@ class NanoVectorDBStorage(BaseVectorStorage):
             d["__vector__"] = embeddings[i]
         results = self._client.upsert(datas=list_data)
         return results
-
+    # query: 层次关键词
     async def query(self, query: str, top_k=5):
-        embedding = await self.embedding_func([query])
+        embedding = await self.embedding_func([query]) # (1, 768)
         embedding = embedding[0]
         results = self._client.query(
             query=embedding,
             top_k=top_k,
             better_than_threshold=self.cosine_better_than_threshold,
-        )
+        ) # 若干个matn.txt里相关的短语
         results = [
             {**dp, "id": dp["__id__"], "distance": dp["__metrics__"]} for dp in results
-        ]
+        ] # {'__id__, 'entity_name', '__metrics__', 'id', 'distance'}
         return results
 
     async def index_done_callback(self):
