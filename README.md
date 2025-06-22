@@ -10,8 +10,8 @@
 设置环境（推荐使用conda）:
 
 ```bash
-git clone https://github.com/YangLing0818/buffer-of-thought-llm
-cd buffer-of-thought-llm
+git clone https://github.com/Zemelee/BOT
+cd BOT
 conda create -n BoT python==3.9 
 pip install -r requirements.txt
 ```
